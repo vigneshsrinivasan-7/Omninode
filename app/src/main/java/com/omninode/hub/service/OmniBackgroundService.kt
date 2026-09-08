@@ -25,6 +25,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -212,7 +214,10 @@ class OmniBackgroundService : Service() {
 
         // 3. Build full-screen intent so MIUI pops up the overlay over any app or lock screen
         val overlayIntent = Intent(this, AssistantOverlayActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(
             this,
@@ -227,8 +232,10 @@ class OmniBackgroundService : Service() {
             .setContentText("Listening for your command...")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setContentIntent(fullScreenPendingIntent)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setAutoCancel(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
 
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -239,6 +246,15 @@ class OmniBackgroundService : Service() {
             startActivity(overlayIntent)
         } catch (e: Exception) {
             Timber.e(e, "OmniBackgroundService: startActivity failed — fullScreenIntent will handle popup")
+        }
+
+        // 5. Watchdog: Auto-resume acoustic monitoring after 6 seconds if overlay is blocked or dismissed
+        serviceScope.launch {
+            kotlinx.coroutines.delay(6000)
+            if (acousticEngine != null && !acousticEngine!!.isMonitoring()) {
+                Timber.w("OmniBackgroundService: Watchdog auto-resuming acoustic monitoring")
+                acousticEngine?.resumeMonitoring()
+            }
         }
     }
 
@@ -271,7 +287,7 @@ class OmniBackgroundService : Service() {
             ).apply {
                 description = "Pops up assistant overlay when 'Hey Omni' is spoken"
                 setShowBadge(true)
-                enableVibration(false)
+                enableVibration(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             nm?.createNotificationChannel(headsUpChannel)

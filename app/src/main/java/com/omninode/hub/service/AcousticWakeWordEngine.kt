@@ -124,15 +124,20 @@ class AcousticWakeWordEngine(
 
     @Synchronized
     fun resumeMonitoring() {
-        if (!isRunning || !isPaused) return
-        try {
-            audioRecord?.startRecording()
-            isPaused = false
-            Timber.i("AcousticWakeWordEngine: Resumed monitoring")
-        } catch (e: Exception) {
-            Timber.w("AcousticWakeWordEngine: Error resuming: ${e.message}")
-            stop()
+        if (!isRunning) {
             start()
+            return
+        }
+        if (isPaused) {
+            try {
+                audioRecord?.startRecording()
+                isPaused = false
+                Timber.i("AcousticWakeWordEngine: Resumed monitoring")
+            } catch (e: Exception) {
+                Timber.w("AcousticWakeWordEngine: Error resuming: ${e.message}")
+                stop()
+                start()
+            }
         }
     }
 

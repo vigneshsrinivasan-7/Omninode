@@ -126,7 +126,7 @@
         <activity
             android:name=".AssistantOverlayActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:exported="false"
+            android:exported="true"
             android:showOnLockScreen="true"
             android:turnScreenOn="true"
             android:launchMode="singleTop" />
