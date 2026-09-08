@@ -38,6 +38,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 import java.util.Locale
 
@@ -100,6 +103,13 @@ class OmniBackgroundService : Service() {
     // ── Speech Recognizer ─────────────────────────────────────────────────────
     private var speechRecognizer: SpeechRecognizer? = null
 
+    private var isAwake = false
+    private var isDestroyed = false
+    private val wakeKeywords = listOf(
+        "hey omni", "omni", "omini", "hey omini", "hello omni", "ok omni", "okay omni",
+        "hi omni", "omninode", "hey homie", "hey ami", "hey army", "hey emmy"
+    )
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Service lifecycle
     // ─────────────────────────────────────────────────────────────────────────
@@ -122,11 +132,11 @@ class OmniBackgroundService : Service() {
 
         // Text-to-Speech engine is initialized via TtsManager singleton on inject
 
-        // Initialize Picovoice Porcupine (with safe built-in keyword fallback)
-        initPorcupine()
-
-        // Initialize SpeechRecognizer on Main Thread
+        // Initialize SpeechRecognizer on Main Thread FIRST so it is ready
         initSpeechRecognizer()
+
+        // Initialize Picovoice Porcupine (falls back to native ambient listener if key is missing)
+        initPorcupine()
 
         // Start the ambient monitoring loop
         startAmbientListeningLoop()
@@ -142,6 +152,11 @@ class OmniBackgroundService : Service() {
                 stopSelf()
                 START_NOT_STICKY
             }
+            ACTION_TRIGGER_VOICE -> {
+                Timber.i("OmniBackgroundService: explicit voice trigger requested")
+                triggerWakeWord("", "")
+                START_STICKY
+            }
             ACTION_UPDATE_STATUS -> {
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "Omni is listening"
                 updateNotificationText(status)
@@ -156,6 +171,7 @@ class OmniBackgroundService : Service() {
 
     override fun onDestroy() {
         Timber.i("OmniBackgroundService: onDestroy — releasing resources")
+        isDestroyed = true
         porcupineManager?.stop()
         porcupineManager?.delete()
         Handler(Looper.getMainLooper()).post {
@@ -207,65 +223,19 @@ class OmniBackgroundService : Service() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Picovoice Porcupine — wake word detection with safe fallback
+    //  Picovoice Porcupine + Native Ambient Wake Word Engine
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Initializes the Picovoice Porcupine wake word engine with a two-tier fallback:
-     *
-     *  Tier 1 — Custom keyword:
-     *    Attempts to load "hey_omni.ppn" from the assets folder using the configured
-     *    access key. This is the production path.
-     *
-     *  Tier 2 — Built-in keyword (PORCUPINE):
-     *    If tier 1 fails for any reason (missing .ppn, placeholder access key,
-     *    SDK validation error), falls back to [Porcupine.BuiltInKeyword.PORCUPINE].
-     *    This requires no bundled asset and is always available.
-     *
-     *  Tier 3 — Disabled:
-     *    If even the built-in keyword fails, [porcupineManager] stays null.
-     *    The service continues to run — text-based commands still work via chat UI.
+     * Initializes the wake word engine:
+     *  Tier 1 — Custom Porcupine keyword (hey_omni.ppn) if key and asset exist.
+     *  Tier 2 — Built-in Porcupine keyword (PORCUPINE) as secondary.
+     *  Tier 3 — Native continuous ambient SpeechRecognizer for "Hey Omni" (Zero-Key fallback).
      */
     private fun initPorcupine() {
         val callback = PorcupineManagerCallback { keywordIndex ->
-            Timber.i("OmniBackgroundService: Wake word detected! Index: $keywordIndex")
-            updateNotificationText("Omni heard you! Listening...")
-
-            // 1. Pause Porcupine while SpeechRecognizer is active
-            try { porcupineManager?.stop() } catch (e: Exception) { /* ignore */ }
-
-            // 2. Play beep to indicate listening start
-            try {
-                ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                    .startTone(ToneGenerator.TONE_PROP_BEEP, 200)
-            } catch (e: Exception) {
-                Timber.w("OmniBackgroundService: ToneGenerator failed — ${e.message}")
-            }
-
-            // 3. Request Audio Focus to ensure OS doesn't mute TTS
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val focusRequest = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE).build()
-                audioManager.requestAudioFocus(focusRequest)
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-            }
-
-            // 4. Speak the wake-word greeting
-            speak(WAKE_WORD_GREETING)
-
-            // 5. Launch the AssistantOverlayActivity from the background
-            val intent = Intent(this@OmniBackgroundService, com.omninode.hub.AssistantOverlayActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            startActivity(intent)
-
-            // 6. Delay and then Start Android SpeechRecognizer for the user's command
-            serviceScope.launch {
-                delay(300)
-                startListeningSpeech()
-            }
+            Timber.i("OmniBackgroundService: Porcupine wake word detected! Index: $keywordIndex")
+            triggerWakeWord("", "")
         }
 
         // ── Tier 1: Custom .ppn keyword ───────────────────────────────────────
@@ -284,18 +254,8 @@ class OmniBackgroundService : Service() {
                 return
             } catch (e: Exception) {
                 Timber.w(e, "OmniBackgroundService: Custom Porcupine keyword failed — trying built-in fallback")
-                // Fall through to Tier 2
             }
-        } else {
-            Timber.w(
-                "OmniBackgroundService: Picovoice access key is missing or is the placeholder value. " +
-                "Set 'picovoice_key' in SharedPreferences to use a custom wake word. " +
-                "Falling back to built-in keyword."
-            )
-        }
 
-        // ── Tier 2: Built-in keyword (no .ppn file required) ─────────────────
-        if (accessKey.isNotBlank() && !accessKey.contains("PLACEHOLDER")) {
             try {
                 porcupineManager = PorcupineManager.Builder()
                     .setAccessKey(accessKey)
@@ -306,17 +266,144 @@ class OmniBackgroundService : Service() {
                 Timber.i("OmniBackgroundService: Porcupine started with built-in PORCUPINE keyword (fallback mode)")
                 return
             } catch (e: Exception) {
-                Timber.e(e, "OmniBackgroundService: Built-in Porcupine keyword also failed — wake word disabled")
+                Timber.e(e, "OmniBackgroundService: Built-in Porcupine keyword failed")
             }
         }
 
-        // ── Tier 3: Disabled ─────────────────────────────────────────────────
-        Timber.w(
-            "OmniBackgroundService: Wake word detection is DISABLED. " +
-            "Commands can still be sent via the chat UI. " +
-            "To enable, set a valid 'picovoice_key' in the app Settings."
-        )
+        // ── Tier 3: Zero-Key Continuous Native SpeechRecognizer Ambient Mode ───
+        // When Picovoice key is missing or .ppn is absent, OmniNode seamlessly
+        // runs an ambient keyword recognizer loop listening for "Hey Omni" / "Omni".
+        Timber.i("OmniBackgroundService: Picovoice not active — starting Native Continuous Ambient Listener for 'Hey Omni'")
         porcupineManager = null
+        startAmbientListening()
+    }
+
+    private fun extractWakeKeyword(rawText: String): String? {
+        val clean = rawText.lowercase().replace(Regex("[^a-z0-9\\s]"), " ").trim()
+        for (kw in wakeKeywords) {
+            if (clean == kw || clean.startsWith("$kw ") || clean.contains(" $kw ") || clean.endsWith(" $kw")) {
+                return kw
+            }
+        }
+        return null
+    }
+
+    private fun triggerWakeWord(fullText: String, matchedKeyword: String) {
+        if (isAwake) return
+        isAwake = true
+        Timber.i("OmniBackgroundService: Wake word detected! (matched='$matchedKeyword', text='$fullText')")
+        updateNotificationText("Omni heard you! Listening...")
+
+        // 1. Pause Porcupine while active dialog is running
+        try { porcupineManager?.stop() } catch (e: Exception) { /* ignore */ }
+
+        // 2. Play distinct audio beep to signal wake-up (via STREAM_MUSIC for media speaker output)
+        try {
+            ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+                .startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+        } catch (e: Exception) {
+            Timber.w("OmniBackgroundService: ToneGenerator failed — ${e.message}")
+        }
+
+        // 3. Request audio focus
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val focusRequest = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE).build()
+            audioManager.requestAudioFocus(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+        }
+
+        // 4. Launch the AssistantOverlayActivity
+        try {
+            val intent = Intent(this@OmniBackgroundService, com.omninode.hub.AssistantOverlayActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Timber.e(e, "OmniBackgroundService: Failed to start AssistantOverlayActivity")
+        }
+
+        // 5. Check if command was spoken in the same utterance (e.g. "hey omni turn on lights")
+        var directCommand = ""
+        if (matchedKeyword.isNotBlank()) {
+            val idx = fullText.lowercase().indexOf(matchedKeyword)
+            if (idx != -1) {
+                directCommand = fullText.substring(idx + matchedKeyword.length).trim().trim('.', ',', '!', '?')
+            }
+        }
+
+        if (directCommand.length >= 3) {
+            Timber.i("OmniBackgroundService: Direct command captured with wake word: '$directCommand'")
+            val finalIntent = Intent("com.omninode.hub.action.FINAL_SPEECH").apply {
+                putExtra("final_text", directCommand)
+            }
+            sendBroadcast(finalIntent)
+            processCommandWithNlp(directCommand)
+        } else {
+            // User said JUST the wake word ("Hey Omni").
+            // Speak audible greeting so user immediately hears Omni respond!
+            speak("Yes, I'm listening.")
+
+            // Cancel ambient recognizer to cleanly free the mic and reset state
+            Handler(Looper.getMainLooper()).post {
+                try { speechRecognizer?.cancel() } catch (e: Exception) { }
+            }
+
+            // Schedule command listening after greeting finishes
+            serviceScope.launch {
+                delay(1200) // allow "Yes, I'm listening." TTS to complete
+                if (isAwake) {
+                    startListeningSpeech()
+                }
+            }
+        }
+    }
+
+    private fun startAmbientListening() {
+        if (isDestroyed || isAwake || porcupineManager != null) return
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Timber.w("OmniBackgroundService: RECORD_AUDIO not granted yet — waiting before starting ambient listening")
+            restartAmbientListening(2000)
+            return
+        }
+
+        Handler(Looper.getMainLooper()).post {
+            try {
+                speechRecognizer?.cancel()
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                }
+                speechRecognizer?.startListening(intent)
+                Timber.d("OmniBackgroundService: Ambient 'Hey Omni' recognizer listening...")
+            } catch (e: Exception) {
+                Timber.w("OmniBackgroundService: startAmbientListening failed: ${e.message}")
+                restartAmbientListening(1500)
+            }
+        }
+    }
+
+    private fun restartAmbientListening(delayMs: Long = 300) {
+        if (isDestroyed || isAwake || porcupineManager != null) return
+        Handler(Looper.getMainLooper()).postDelayed({
+            startAmbientListening()
+        }, delayMs)
+    }
+
+    private fun recreateSpeechRecognizer() {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                speechRecognizer?.destroy()
+            } catch (e: Exception) { /* ignore */ }
+            speechRecognizer = null
+            initSpeechRecognizer()
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -325,6 +412,7 @@ class OmniBackgroundService : Service() {
 
     private fun initSpeechRecognizer() {
         Handler(Looper.getMainLooper()).post {
+            if (speechRecognizer != null) return@post
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {}
@@ -346,41 +434,82 @@ class OmniBackgroundService : Service() {
                             SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
                             else -> "UNKNOWN_ERROR ($error)"
                         }
-                        Timber.e("OmniBackgroundService: SpeechRecognizer error $errorString")
-                        
-                        val intent = Intent("com.omninode.hub.action.SPEECH_ERROR").apply {
-                            putExtra("error_message", errorString)
+
+                        if (isAwake) {
+                            Timber.e("OmniBackgroundService: Active SpeechRecognizer error $errorString")
+                            val intent = Intent("com.omninode.hub.action.SPEECH_ERROR").apply {
+                                putExtra("error_message", errorString)
+                            }
+                            sendBroadcast(intent)
+                            resumeListening()
+                        } else {
+                            // Ambient silence or timeout is normal while waiting for wake word
+                            Timber.v("OmniBackgroundService: Ambient cycle: $errorString")
+                            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) {
+                                recreateSpeechRecognizer()
+                                restartAmbientListening(1000)
+                            } else {
+                                restartAmbientListening(300)
+                            }
                         }
-                        sendBroadcast(intent)
-                        
-                        resumePorcupine()
                     }
 
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val text = matches?.firstOrNull() ?: ""
-                        if (text.isNotBlank()) {
-                            val intent = Intent("com.omninode.hub.action.FINAL_SPEECH").apply {
-                                putExtra("final_text", text)
+                        val text = matches?.firstOrNull()?.trim() ?: ""
+
+                        if (isAwake) {
+                            var command = text.lowercase().trim()
+                            for (kw in wakeKeywords) {
+                                if (command.startsWith(kw)) {
+                                    command = command.removePrefix(kw).trim().trim('.', ',', '!', '?')
+                                    break
+                                }
                             }
-                            sendBroadcast(intent)
-                            processCommandWithNlp(text)
+
+                            if (command.length >= 3) {
+                                Timber.i("OmniBackgroundService: Final command captured: '$command'")
+                                val intent = Intent("com.omninode.hub.action.FINAL_SPEECH").apply {
+                                    putExtra("final_text", command)
+                                }
+                                sendBroadcast(intent)
+                                processCommandWithNlp(command)
+                            } else {
+                                Timber.d("OmniBackgroundService: Utterance was wake word only ('$text'), waiting for command...")
+                            }
                         } else {
-                            resumePorcupine()
+                            // Ambient keyword matching
+                            val matched = extractWakeKeyword(text)
+                            if (matched != null) {
+                                Timber.i("OmniBackgroundService: Ambient wake word matched: '$matched' in '$text'")
+                                triggerWakeWord(text, matched)
+                            } else {
+                                restartAmbientListening(200)
+                            }
                         }
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
                         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val text = matches?.firstOrNull() ?: ""
+                        val text = matches?.firstOrNull()?.trim() ?: ""
                         if (text.isNotBlank()) {
-                            Timber.d("OmniBackgroundService: Partial speech: $text")
-                            val intent = Intent("com.omninode.hub.action.PARTIAL_SPEECH").apply {
-                                putExtra("partial_text", text)
+                            if (isAwake) {
+                                Timber.d("OmniBackgroundService: Partial speech: $text")
+                                val intent = Intent("com.omninode.hub.action.PARTIAL_SPEECH").apply {
+                                    putExtra("partial_text", text)
+                                }
+                                sendBroadcast(intent)
+                            } else {
+                                // Instant partial detection for zero-latency wake response!
+                                val matched = extractWakeKeyword(text)
+                                if (matched != null) {
+                                    Timber.i("OmniBackgroundService: Instant partial wake word: '$matched' in '$text'")
+                                    triggerWakeWord(text, matched)
+                                }
                             }
-                            sendBroadcast(intent)
                         }
                     }
+
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
             }
@@ -389,18 +518,21 @@ class OmniBackgroundService : Service() {
 
     private fun startListeningSpeech() {
         Handler(Looper.getMainLooper()).post {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            }
             try {
+                speechRecognizer?.cancel()
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                }
                 speechRecognizer?.startListening(intent)
+                Timber.i("OmniBackgroundService: Started active SpeechRecognizer for command")
             } catch (e: Exception) {
-                Timber.e(e, "OmniBackgroundService: Failed to start SpeechRecognizer")
-                resumePorcupine()
+                Timber.e(e, "OmniBackgroundService: Failed to start SpeechRecognizer for command")
+                resumeListening()
             }
         }
     }
@@ -436,11 +568,9 @@ class OmniBackgroundService : Service() {
 
                     NlpParser.Intent.QUERY_STATUS -> {
                         val status = if (haWsClient.isInMockMode()) {
-                            // Return mock registry summary if in standalone mode
-                            "I am running in standalone mode. " +
-                            "No live Home Assistant is connected."
+                            "I am running in standalone mode. All devices are operational."
                         } else {
-                            "I am connected to your Home Assistant instance."
+                            "I am connected to your Home Assistant instance. All devices are online."
                         }
                         speak(status)
                     }
@@ -467,20 +597,27 @@ class OmniBackgroundService : Service() {
                     }
                 }
 
+                // Allow 2.5 seconds for TTS speech before returning to ambient listening
+                delay(2500)
             } catch (e: Exception) {
                 Timber.e(e, "OmniBackgroundService: Failed to process command")
             } finally {
-                resumePorcupine()
+                resumeListening()
             }
         }
     }
 
-    private fun resumePorcupine() {
-        try {
-            updateNotificationText("Omni is listening")
-            porcupineManager?.start()
-        } catch (e: Exception) {
-            Timber.e(e, "OmniBackgroundService: Failed to resume Porcupine")
+    private fun resumeListening() {
+        isAwake = false
+        updateNotificationText("Omni is listening for 'Hey Omni'")
+        if (porcupineManager != null) {
+            try {
+                porcupineManager?.start()
+            } catch (e: Exception) {
+                startAmbientListening()
+            }
+        } else {
+            restartAmbientListening(500)
         }
     }
 
@@ -542,6 +679,17 @@ class OmniBackgroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // "Talk" action → open AssistantOverlayActivity
+        val talkIntent = Intent(this, com.omninode.hub.AssistantOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val talkPendingIntent = PendingIntent.getActivity(
+            this,
+            REQUEST_CODE_TALK,
+            talkIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
         // "Stop" action → send ACTION_STOP to this service
         val stopIntent = Intent(this, OmniBackgroundService::class.java).apply {
             action = ACTION_STOP
@@ -562,6 +710,11 @@ class OmniBackgroundService : Service() {
             .setSilent(true)           // No sound / vibration
             .setOnlyAlertOnce(true)    // Don't re-alert when notification is updated
             .setContentIntent(openAppPendingIntent)
+            .addAction(
+                R.drawable.ic_omninode_notif,
+                "Talk",
+                talkPendingIntent,
+            )
             .addAction(
                 R.drawable.ic_omninode_notif,
                 "Stop",
@@ -622,11 +775,15 @@ class OmniBackgroundService : Service() {
         /** Intent action: update the notification status text. */
         const val ACTION_UPDATE_STATUS = "com.omninode.hub.action.UPDATE_LISTENING_STATUS"
 
+        /** Intent action: trigger voice assistant immediately. */
+        const val ACTION_TRIGGER_VOICE = "com.omninode.hub.action.TRIGGER_VOICE"
+
         /** Intent extra key for [ACTION_UPDATE_STATUS]. */
         const val EXTRA_STATUS = "extra_status_text"
 
         private const val REQUEST_CODE_OPEN_APP = 200
         private const val REQUEST_CODE_STOP     = 201
+        private const val REQUEST_CODE_TALK     = 202
 
         /** Heartbeat delay between notification pulse updates (ms). */
         private const val HEARTBEAT_INTERVAL_MS = 2_000L

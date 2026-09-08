@@ -77,6 +77,16 @@ class AssistantOverlayActivity : ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
+        // Ensure OmniBackgroundService is actively listening for the user's command
+        try {
+            val triggerIntent = Intent(this, com.omninode.hub.service.OmniBackgroundService::class.java).apply {
+                action = com.omninode.hub.service.OmniBackgroundService.ACTION_TRIGGER_VOICE
+            }
+            startService(triggerIntent)
+        } catch (e: Exception) {
+            // Service already running or restricted
+        }
+
         setContent {
             OmniNodeTheme {
                 val speechText by speechTextState
@@ -92,7 +102,17 @@ class AssistantOverlayActivity : ComponentActivity() {
                 AssistantOverlayUI(
                     speechText = speechText,
                     isFinal = isFinal,
-                    onDismiss = { finish() }
+                    onDismiss = { finish() },
+                    onRetry = {
+                        speechTextState.value = ""
+                        isFinalState.value = false
+                        try {
+                            val triggerIntent = Intent(this@AssistantOverlayActivity, com.omninode.hub.service.OmniBackgroundService::class.java).apply {
+                                action = com.omninode.hub.service.OmniBackgroundService.ACTION_TRIGGER_VOICE
+                            }
+                            startService(triggerIntent)
+                        } catch (e: Exception) { }
+                    }
                 )
             }
         }
@@ -112,7 +132,8 @@ class AssistantOverlayActivity : ComponentActivity() {
 fun AssistantOverlayUI(
     speechText: String,
     isFinal: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier

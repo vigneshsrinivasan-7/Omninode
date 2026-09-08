@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -61,6 +63,7 @@ fun DashboardScreen(
     val connectivity  by viewModel.connectivityMode.collectAsState()
     val wsStatus      by viewModel.wsConnectionStatus.collectAsState()
     val npuDelegate   by viewModel.npuDelegate.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         containerColor = Background,
@@ -90,6 +93,19 @@ fun DashboardScreen(
                         r.devices.count { it.isOnline }
                     } ?: 0,
                     roomCount   = structure?.rooms?.size ?: 0,
+                )
+            }
+
+            // ── Voice Assistant Hero Card ────────────────────────────────────
+            item { Spacer(Modifier.height(4.dp)) }
+            item {
+                VoiceAssistantHeroCard(
+                    onClick = {
+                        val intent = Intent(context, com.omninode.hub.AssistantOverlayActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        }
+                        context.startActivity(intent)
+                    }
                 )
             }
 
@@ -412,6 +428,73 @@ private fun PresetChip(preset: AutomationPreset, onClick: () -> Unit) {
         if (pressed) {
             kotlinx.coroutines.delay(150)
             pressed = false
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Voice Assistant Hero Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun VoiceAssistantHeroCard(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = SurfaceElevated,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(GradientCyanViolet)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Voice Assistant",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                    )
+                    Text(
+                        text = "Say \"Hey Omni\" or tap to speak",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Primary,
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Primary.copy(alpha = 0.15f),
+            ) {
+                Text(
+                    text = "Listening ●",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Primary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }

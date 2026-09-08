@@ -126,6 +126,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        try {
+            startForegroundService(OmniBackgroundService.startIntent(this))
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to ensure OmniBackgroundService onResume")
+        }
+    }
+
     // ─── Matter Commissioning ────────────────────────────────────────────────
 
     /**
@@ -275,9 +284,22 @@ private fun PermissionGate(content: @Composable () -> Unit) {
         )
     )
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     LaunchedEffect(Unit) {
         if (!permissionsState.allPermissionsGranted) {
             permissionsState.launchMultiplePermissionRequest()
+        }
+    }
+
+    LaunchedEffect(permissionsState.allPermissionsGranted) {
+        if (permissionsState.allPermissionsGranted) {
+            try {
+                context.startForegroundService(OmniBackgroundService.startIntent(context))
+                Timber.i("OmniBackgroundService started after permissions granted")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to start OmniBackgroundService after permission grant")
+            }
         }
     }
 
