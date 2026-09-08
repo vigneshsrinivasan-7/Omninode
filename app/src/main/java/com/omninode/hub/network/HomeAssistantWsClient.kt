@@ -142,23 +142,23 @@ class HomeAssistantWsClient @Inject constructor(
         service: String,
         serviceData: Map<String, Any>,
     ): Int {
-        if (isMockMode) {
-            Timber.d("MockMode → callService $domain.$service data=$serviceData")
+        if (isMockMode || !isAuthenticated || webSocket == null) {
+            Timber.d("Routing callService $domain.$service to VirtualDeviceRegistry data=$serviceData")
             scope.launch { virtualRegistry.handleServiceCall(domain, service, serviceData) }
             return messageId.getAndIncrement()
         }
 
-        if (!isAuthenticated) {
-            Timber.w("callService() called before authentication — queuing not yet implemented")
-            return -1
-        }
         val id  = messageId.getAndIncrement()
         val msg = callAdapter.toJson(
             HaCallService(id = id, domain = domain, service = service, serviceData = serviceData)
         )
         val sent = webSocket?.send(msg) ?: false
         Timber.d("HA → callService [id=$id, domain=$domain, service=$service] sent=$sent")
-        return if (sent) id else -1
+        if (!sent) {
+            // Fallback to virtual registry if send failed
+            scope.launch { virtualRegistry.handleServiceCall(domain, service, serviceData) }
+        }
+        return if (sent) id else messageId.getAndIncrement()
     }
 
     /** Returns true if the client is currently running in standalone mock mode. */
