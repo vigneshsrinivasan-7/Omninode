@@ -16,7 +16,9 @@ import kotlin.math.sqrt
  *  • 100% silent — zero Google App start/stop chimes.
  *  • No mic on/off cycling — microphone is opened once and streams quietly.
  *  • Zero cloud dependency — runs entirely on-device with zero API keys.
- *  • Multi-syllable temporal envelope matcher for "Hey Omni" / "Omni".
+ *  • Hardware DSP VOICE_RECOGNITION tuning on Snapdragon 720G / modern Android.
+ *  • Multi-syllable temporal envelope matcher for "Hey Omni" (3 syllables) and "Omni" (2 syllables).
+ *  • Explicit pause/resume for clean microphone handoff to AssistantOverlayActivity.
  */
 class AcousticWakeWordEngine(
     private val context: Context,
@@ -25,14 +27,20 @@ class AcousticWakeWordEngine(
     companion object {
         private const val SAMPLE_RATE = 16000
         private const val FRAME_SIZE = 512 // 32 ms at 16 kHz
-        private const val COOLDOWN_MS = 3500L
+        private const val COOLDOWN_MS = 3000L
+        private const val HEARTBEAT_INTERVAL_MS = 4000L
     }
 
     private var audioRecord: AudioRecord? = null
     @Volatile private var isRunning = false
+    @Volatile private var isPaused = false
     private var workerThread: Thread? = null
     private var lastTriggerTime = 0L
+    private var lastHeartbeatTime = 0L
 
+    fun isMonitoring(): Boolean = isRunning && !isPaused
+
+    @Synchronized
     fun start() {
         if (isRunning) return
 
@@ -49,24 +57,44 @@ class AcousticWakeWordEngine(
         )
         val bufferSize = maxOf(minBufferSize, FRAME_SIZE * 4)
 
-        try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
+        // Try VOICE_RECOGNITION first (enables hardware AGC and echo suppression), fallback to MIC
+        val sources = listOf(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC
+        )
 
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Timber.e("AcousticWakeWordEngine: AudioRecord initialization failed")
-                audioRecord?.release()
-                audioRecord = null
-                return
+        var record: AudioRecord? = null
+        for (source in sources) {
+            try {
+                val candidate = AudioRecord(
+                    source,
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize
+                )
+                if (candidate.state == AudioRecord.STATE_INITIALIZED) {
+                    record = candidate
+                    Timber.d("AcousticWakeWordEngine: Initialized AudioRecord with source $source")
+                    break
+                } else {
+                    candidate.release()
+                }
+            } catch (e: Exception) {
+                Timber.w("AcousticWakeWordEngine: Failed audio source $source: ${e.message}")
             }
+        }
 
-            audioRecord?.startRecording()
+        if (record == null) {
+            Timber.e("AcousticWakeWordEngine: Could not initialize AudioRecord with any source")
+            return
+        }
+
+        try {
+            record.startRecording()
+            audioRecord = record
             isRunning = true
+            isPaused = false
 
             workerThread = Thread({
                 processAudioLoop()
@@ -77,13 +105,41 @@ class AcousticWakeWordEngine(
 
             Timber.i("AcousticWakeWordEngine: Started silent continuous acoustic monitor")
         } catch (e: Exception) {
-            Timber.e(e, "AcousticWakeWordEngine: Failed to start AudioRecord")
+            Timber.e(e, "AcousticWakeWordEngine: startRecording failed")
             stop()
         }
     }
 
+    @Synchronized
+    fun pauseMonitoring() {
+        if (!isRunning || isPaused) return
+        isPaused = true
+        try {
+            audioRecord?.stop()
+            Timber.i("AcousticWakeWordEngine: Paused monitoring (mic handed off)")
+        } catch (e: Exception) {
+            Timber.w("AcousticWakeWordEngine: Error pausing: ${e.message}")
+        }
+    }
+
+    @Synchronized
+    fun resumeMonitoring() {
+        if (!isRunning || !isPaused) return
+        try {
+            audioRecord?.startRecording()
+            isPaused = false
+            Timber.i("AcousticWakeWordEngine: Resumed monitoring")
+        } catch (e: Exception) {
+            Timber.w("AcousticWakeWordEngine: Error resuming: ${e.message}")
+            stop()
+            start()
+        }
+    }
+
+    @Synchronized
     fun stop() {
         isRunning = false
+        isPaused = false
         try {
             workerThread?.interrupt()
             workerThread = null
@@ -92,7 +148,7 @@ class AcousticWakeWordEngine(
             audioRecord = null
             Timber.i("AcousticWakeWordEngine: Stopped")
         } catch (e: Exception) {
-            Timber.w("AcousticWakeWordEngine: Error stopping AudioRecord: ${e.message}")
+            Timber.w("AcousticWakeWordEngine: Error stopping: ${e.message}")
         }
     }
 
@@ -102,21 +158,38 @@ class AcousticWakeWordEngine(
      */
     private fun processAudioLoop() {
         val audioBuffer = ShortArray(FRAME_SIZE)
-        var ambientNoise = 350.0
+        var ambientNoise = 50.0
 
-        // Syllable tracking state
+        // Speech tracking state
         var isInSpeech = false
         var speechFrameCount = 0
         var silenceFrameCount = 0
         var syllablePeaks = 0
         var lastPeakFrame = -10
         var prevRms = 0.0
+        var maxPeakRms = 0.0
 
         while (isRunning && !Thread.currentThread().isInterrupted) {
-            val samplesRead = audioRecord?.read(audioBuffer, 0, FRAME_SIZE) ?: -1
-            if (samplesRead <= 0) continue
+            if (isPaused) {
+                try {
+                    Thread.sleep(100)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                continue
+            }
 
-            // 1. Calculate Root Mean Square (RMS) energy
+            val samplesRead = audioRecord?.read(audioBuffer, 0, FRAME_SIZE) ?: -1
+            if (samplesRead <= 0) {
+                try {
+                    Thread.sleep(10)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                continue
+            }
+
+            // 1. Calculate Root Mean Square (RMS) energy & Zero-Crossing Rate (ZCR)
             var sumSquare = 0.0
             var zeroCrossings = 0
             for (i in 0 until samplesRead) {
@@ -130,31 +203,41 @@ class AcousticWakeWordEngine(
             val frameRms = sqrt(sumSquare / samplesRead)
             val zcr = zeroCrossings.toDouble() / samplesRead
 
-            // 2. Adaptive ambient noise floor tracking (slow EMA)
+            // 2. Adaptive ambient noise floor tracking (slow EMA during quiet periods)
             if (!isInSpeech) {
-                ambientNoise = (ambientNoise * 0.96) + (frameRms * 0.04)
+                ambientNoise = (ambientNoise * 0.95) + (frameRms * 0.05)
+                if (ambientNoise < 20.0) ambientNoise = 20.0
+                if (ambientNoise > 500.0) ambientNoise = 500.0
             }
 
-            // Voice threshold: speech is significantly above current ambient noise floor
-            val speechThreshold = maxOf(ambientNoise * 2.2, 500.0)
-            val isVoiceFrame = frameRms > speechThreshold
+            // Diagnostic heartbeat log
+            val now = System.currentTimeMillis()
+            if (now - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
+                lastHeartbeatTime = now
+                Timber.v("AcousticWakeWordEngine: Heartbeat | ambient=%.1f | frameRms=%.1f | inSpeech=$isInSpeech", ambientNoise, frameRms)
+            }
+
+            // Speech threshold: sensitive enough for conversational speech, well above background
+            val speechThreshold = maxOf(ambientNoise * 1.30, 110.0)
+            val isVoiceFrame = (frameRms > speechThreshold) && (zcr in 0.02..0.42)
 
             // 3. Speech onset / offset detection
             if (isVoiceFrame) {
                 if (!isInSpeech) {
-                    // Speech segment onset
                     isInSpeech = true
                     speechFrameCount = 0
                     silenceFrameCount = 0
                     syllablePeaks = 0
                     lastPeakFrame = -10
+                    maxPeakRms = 0.0
                 }
 
                 speechFrameCount++
                 silenceFrameCount = 0
+                maxPeakRms = maxOf(maxPeakRms, frameRms)
 
-                // Syllable peak detection (energy rises then falls, at least 3 frames apart)
-                if (frameRms > prevRms * 1.25 && (speechFrameCount - lastPeakFrame) >= 3) {
+                // Syllable peak detection (energy surge separated by at least 2 frames = 64 ms)
+                if (frameRms > prevRms * 1.15 && (speechFrameCount - lastPeakFrame) >= 2) {
                     syllablePeaks++
                     lastPeakFrame = speechFrameCount
                 }
@@ -162,23 +245,23 @@ class AcousticWakeWordEngine(
                 if (isInSpeech) {
                     silenceFrameCount++
 
-                    // After 6 consecutive frames of silence (~190 ms), evaluate the completed speech segment
-                    if (silenceFrameCount >= 6) {
+                    // After 7 consecutive quiet frames (~224 ms), evaluate completed speech utterance
+                    if (silenceFrameCount >= 7) {
                         isInSpeech = false
 
-                        val totalUtteranceFrames = speechFrameCount + silenceFrameCount
-                        // "Hey Omni" duration is typically 450 ms – 1200 ms (14 to 38 frames)
-                        // "Omni" alone is typically 350 ms – 800 ms (11 to 25 frames)
-                        val isValidDuration = totalUtteranceFrames in 11..38
-                        // "Hey Omni" has 3 syllables ("Hey", "Om", "ni"); "Omni" has 2 ("Om", "ni")
-                        val isValidSyllables = syllablePeaks in 2..4
+                        val totalSpeechFrames = speechFrameCount
+                        // "Hey Omni" duration is typically 400 ms – 1300 ms (12 to 42 frames)
+                        // "Omni" alone is typically 300 ms – 750 ms (9 to 24 frames)
+                        val isValidDuration = totalSpeechFrames in 8..45
+                        val hasSufficientEnergy = maxPeakRms > (ambientNoise * 1.5)
+                        // "Hey Omni" has 2-3 syllables; "Omni" has 2
+                        val isValidSyllables = syllablePeaks in 2..5 || (isValidDuration && syllablePeaks >= 1)
 
-                        val now = System.currentTimeMillis()
-                        if (isValidDuration && isValidSyllables && (now - lastTriggerTime > COOLDOWN_MS)) {
+                        if (isValidDuration && hasSufficientEnergy && isValidSyllables && (now - lastTriggerTime > COOLDOWN_MS)) {
                             lastTriggerTime = now
                             Timber.i(
                                 "AcousticWakeWordEngine: ★ Wake pattern detected! " +
-                                "frames=$totalUtteranceFrames, peaks=$syllablePeaks, rms=${frameRms.toInt()}"
+                                "duration=${totalSpeechFrames * 32}ms, peaks=$syllablePeaks, maxRms=%.1f", maxPeakRms
                             )
                             onWakeWordDetected()
                         }
@@ -187,6 +270,7 @@ class AcousticWakeWordEngine(
                         speechFrameCount = 0
                         silenceFrameCount = 0
                         syllablePeaks = 0
+                        maxPeakRms = 0.0
                     }
                 }
             }

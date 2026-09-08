@@ -56,13 +56,10 @@ class AssistantOverlayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Play brief, pleasant wake tone
-        try {
-            ToneGenerator(AudioManager.STREAM_MUSIC, 90)
-                .startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-        } catch (e: Exception) {
-            Timber.w("ToneGenerator failed: ${e.message}")
-        }
+        // Allow overlay to display over lockscreen and turn screen on if needed
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Initialize SpeechRecognizer directly in this foreground Activity
         initAndStartRecognition()
@@ -245,6 +242,14 @@ class AssistantOverlayActivity : ComponentActivity() {
         try {
             speechRecognizer?.destroy()
         } catch (e: Exception) { /* ignore */ }
+
+        // Resume ambient acoustic wake word monitoring
+        try {
+            startService(com.omninode.hub.service.OmniBackgroundService.resumeIntent(this))
+            Timber.i("AssistantOverlayActivity: Resumed OmniBackgroundService acoustic monitoring")
+        } catch (e: Exception) {
+            Timber.w("AssistantOverlayActivity: Failed to resume OmniBackgroundService: ${e.message}")
+        }
     }
 }
 
