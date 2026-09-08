@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    backup_rules.xml — Android Auto Backup rules for OmniNode.
+    Sensitive data (HA tokens) is excluded from cloud backup.
+-->
+<full-backup-content>
+    <!-- Exclude Home Assistant access tokens from cloud backup -->
+    <exclude domain="sharedpref" path="omninode_config.xml" />
+    <!-- Exclude downloaded AI models — large and device-specific -->
+    <exclude domain="file" path="models/" />
+</full-backup-content>

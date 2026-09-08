@@ -1,0 +1,193 @@
+[versions]
+# ── SDK & tooling ──────────────────────────────────────────────────────────────
+agp                         = "8.7.3"
+kotlin                      = "2.1.0"
+ksp                         = "2.1.0-1.0.29"
+
+# ── AndroidX Core ─────────────────────────────────────────────────────────────
+coreKtx                     = "1.16.0"
+lifecycleRuntimeKtx         = "2.9.1"
+activityCompose             = "1.10.1"
+splashscreen                = "1.0.1"
+
+# ── Jetpack Compose ───────────────────────────────────────────────────────────
+composeBom                  = "2024.12.01"
+navigationCompose           = "2.9.0"
+
+# ── Dependency Injection ──────────────────────────────────────────────────────
+hilt                        = "2.55"
+hiltNavigationCompose       = "1.2.0"
+
+# ── Networking ────────────────────────────────────────────────────────────────
+okhttp                      = "4.12.0"
+retrofit                    = "2.11.0"
+moshi                       = "1.15.1"
+
+# ── Coroutines ────────────────────────────────────────────────────────────────
+coroutines                  = "1.9.0"
+
+# ── DataStore ─────────────────────────────────────────────────────────────────
+datastore                   = "1.1.4"
+
+# ── Room ──────────────────────────────────────────────────────────────────────
+room                        = "2.7.1"
+
+# ── Play Services / Matter ────────────────────────────────────────────────────
+playServicesHome            = "16.0.0"
+
+# ── AI / ML ───────────────────────────────────────────────────────────────────
+# LiteRT (successor to TensorFlow Lite) — GA on Maven Central
+litert                      = "1.0.1"
+# LiteRT GPU delegate
+litert-gpu                  = "1.0.1"
+# QNN (Qualcomm Neural Network) delegate for LiteRT — hosted on Maven Central
+# NOTE: replace with the exact artifact coordinates when Qualcomm publishes on Maven Central.
+#       During development, the .aar is manually placed in app/libs/
+litert-qnn                  = "1.0.1"
+
+# ── CameraX ───────────────────────────────────────────────────────────────────
+camerax                     = "1.4.1"
+
+# ── Accompanist / Permissions ─────────────────────────────────────────────────
+accompanistPermissions      = "0.37.0"
+
+# ── Coil (image loading) ──────────────────────────────────────────────────────
+coil                        = "3.1.0"
+
+# ── Timber (logging) ──────────────────────────────────────────────────────────
+timber                      = "5.0.1"
+
+# ── Picovoice Porcupine (wake word) ───────────────────────────────────────────
+porcupine                   = "3.0.2"
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+junit                       = "4.13.2"
+junitExt                    = "1.2.1"
+espressoCore                = "3.6.1"
+
+[libraries]
+# ── AndroidX Core ─────────────────────────────────────────────────────────────
+androidx-core-ktx                   = { group = "androidx.core",               name = "core-ktx",                          version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx      = { group = "androidx.lifecycle",          name = "lifecycle-runtime-ktx",             version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-viewmodel-compose= { group = "androidx.lifecycle",          name = "lifecycle-viewmodel-compose",        version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-runtime-compose  = { group = "androidx.lifecycle",          name = "lifecycle-runtime-compose",         version.ref = "lifecycleRuntimeKtx" }
+androidx-activity-compose           = { group = "androidx.activity",           name = "activity-compose",                  version.ref = "activityCompose" }
+androidx-splashscreen               = { group = "androidx.core",               name = "core-splashscreen",                 version.ref = "splashscreen" }
+
+# ── Jetpack Compose BOM ───────────────────────────────────────────────────────
+androidx-compose-bom                = { group = "androidx.compose",            name = "compose-bom",                       version.ref = "composeBom" }
+androidx-ui                         = { group = "androidx.compose.ui",         name = "ui" }
+androidx-ui-graphics                = { group = "androidx.compose.ui",         name = "ui-graphics" }
+androidx-ui-tooling                 = { group = "androidx.compose.ui",         name = "ui-tooling" }
+androidx-ui-tooling-preview         = { group = "androidx.compose.ui",         name = "ui-tooling-preview" }
+androidx-ui-test-manifest           = { group = "androidx.compose.ui",         name = "ui-test-manifest" }
+androidx-ui-test-junit4             = { group = "androidx.compose.ui",         name = "ui-test-junit4" }
+androidx-material3                  = { group = "androidx.compose.material3",  name = "material3" }
+androidx-material-icons-extended    = { group = "androidx.compose.material",   name = "material-icons-extended" }
+androidx-navigation-compose         = { group = "androidx.navigation",         name = "navigation-compose",                version.ref = "navigationCompose" }
+
+# ── Hilt ──────────────────────────────────────────────────────────────────────
+hilt-android                        = { group = "com.google.dagger",           name = "hilt-android",                      version.ref = "hilt" }
+hilt-android-compiler               = { group = "com.google.dagger",           name = "hilt-android-compiler",             version.ref = "hilt" }
+hilt-navigation-compose             = { group = "androidx.hilt",               name = "hilt-navigation-compose",           version.ref = "hiltNavigationCompose" }
+
+# ── Networking ────────────────────────────────────────────────────────────────
+okhttp-core                         = { group = "com.squareup.okhttp3",        name = "okhttp",                            version.ref = "okhttp" }
+okhttp-logging-interceptor          = { group = "com.squareup.okhttp3",        name = "logging-interceptor",               version.ref = "okhttp" }
+okhttp-mockwebserver                = { group = "com.squareup.okhttp3",        name = "mockwebserver",                     version.ref = "okhttp" }
+retrofit-core                       = { group = "com.squareup.retrofit2",      name = "retrofit",                          version.ref = "retrofit" }
+retrofit-moshi                      = { group = "com.squareup.retrofit2",      name = "converter-moshi",                   version.ref = "retrofit" }
+moshi-core                          = { group = "com.squareup.moshi",          name = "moshi",                             version.ref = "moshi" }
+moshi-kotlin                        = { group = "com.squareup.moshi",          name = "moshi-kotlin",                      version.ref = "moshi" }
+moshi-kotlin-codegen                = { group = "com.squareup.moshi",          name = "moshi-kotlin-codegen",              version.ref = "moshi" }
+
+# ── Coroutines ────────────────────────────────────────────────────────────────
+kotlinx-coroutines-core             = { group = "org.jetbrains.kotlinx",       name = "kotlinx-coroutines-core",           version.ref = "coroutines" }
+kotlinx-coroutines-android          = { group = "org.jetbrains.kotlinx",       name = "kotlinx-coroutines-android",        version.ref = "coroutines" }
+
+# ── DataStore ─────────────────────────────────────────────────────────────────
+androidx-datastore-preferences      = { group = "androidx.datastore",          name = "datastore-preferences",             version.ref = "datastore" }
+
+# ── Room ──────────────────────────────────────────────────────────────────────
+androidx-room-runtime               = { group = "androidx.room",               name = "room-runtime",                      version.ref = "room" }
+androidx-room-ktx                   = { group = "androidx.room",               name = "room-ktx",                          version.ref = "room" }
+androidx-room-compiler              = { group = "androidx.room",               name = "room-compiler",                     version.ref = "room" }
+
+# ── Play Services / Matter ────────────────────────────────────────────────────
+play-services-home                  = { group = "com.google.android.gms",      name = "play-services-home",                version.ref = "playServicesHome" }
+
+# ── AI / ML – LiteRT ─────────────────────────────────────────────────────────
+# Core LiteRT runtime (replaces TFLite)
+litert-core                         = { group = "com.google.ai.edge.litert",   name = "litert",                            version.ref = "litert" }
+# LiteRT GPU delegate (Adreno OpenCL fallback)
+litert-gpu-delegate                 = { group = "com.google.ai.edge.litert",   name = "litert-gpu",                        version.ref = "litert-gpu" }
+# QNN delegate (Hexagon NPU — primary inference provider)
+# Qualcomm publishes this as part of the AI Engine Direct / QAIRT SDK.
+# The .aar is typically bundled manually in app/libs/ after download from
+# https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
+# Once on Maven Central / Google Maven, swap with:
+#   litert-qnn-delegate = { group = "com.qualcomm.qti", name = "litert-qnn", version.ref = "litert-qnn" }
+# For now, we declare it as a file dependency in app/build.gradle.kts.
+
+# ── CameraX ───────────────────────────────────────────────────────────────────
+camerax-core                        = { group = "androidx.camera",             name = "camera-core",                       version.ref = "camerax" }
+camerax-camera2                     = { group = "androidx.camera",             name = "camera-camera2",                    version.ref = "camerax" }
+camerax-lifecycle                   = { group = "androidx.camera",             name = "camera-lifecycle",                  version.ref = "camerax" }
+camerax-view                        = { group = "androidx.camera",             name = "camera-view",                       version.ref = "camerax" }
+camerax-extensions                  = { group = "androidx.camera",             name = "camera-extensions",                 version.ref = "camerax" }
+
+# ── Accompanist ───────────────────────────────────────────────────────────────
+accompanist-permissions             = { group = "com.google.accompanist",      name = "accompanist-permissions",           version.ref = "accompanistPermissions" }
+
+# ── Coil ──────────────────────────────────────────────────────────────────────
+coil-compose                        = { group = "io.coil-kt.coil3",            name = "coil-compose",                      version.ref = "coil" }
+coil-network-okhttp                 = { group = "io.coil-kt.coil3",            name = "coil-network-okhttp",               version.ref = "coil" }
+
+# ── Timber ────────────────────────────────────────────────────────────────────
+timber                              = { group = "com.jakewharton.timber",      name = "timber",                            version.ref = "timber" }
+
+# ── Picovoice Porcupine ───────────────────────────────────────────────────────
+picovoice-porcupine                 = { group = "ai.picovoice",                name = "porcupine-android",                 version.ref = "porcupine" }
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+junit                               = { group = "junit",                        name = "junit",                             version.ref = "junit" }
+androidx-junit                      = { group = "androidx.test.ext",           name = "junit",                             version.ref = "junitExt" }
+androidx-espresso-core              = { group = "androidx.test.espresso",      name = "espresso-core",                     version.ref = "espressoCore" }
+
+[plugins]
+android-application                 = { id = "com.android.application",        version.ref = "agp" }
+kotlin-android                      = { id = "org.jetbrains.kotlin.android",   version.ref = "kotlin" }
+kotlin-compose                      = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt                                = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp                                 = { id = "com.google.devtools.ksp",        version.ref = "ksp" }
+
+[bundles]
+compose = [
+    "androidx-ui",
+    "androidx-ui-graphics",
+    "androidx-ui-tooling-preview",
+    "androidx-material3",
+    "androidx-material-icons-extended",
+    "androidx-navigation-compose",
+    "androidx-lifecycle-viewmodel-compose",
+    "androidx-lifecycle-runtime-compose",
+]
+camerax = [
+    "camerax-core",
+    "camerax-camera2",
+    "camerax-lifecycle",
+    "camerax-view",
+    "camerax-extensions",
+]
+networking = [
+    "okhttp-core",
+    "okhttp-logging-interceptor",
+    "retrofit-core",
+    "retrofit-moshi",
+    "moshi-core",
+    "moshi-kotlin",
+]
+coroutines = [
+    "kotlinx-coroutines-core",
+    "kotlinx-coroutines-android",
+]

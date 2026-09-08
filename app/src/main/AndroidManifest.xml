@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    OmniNode Hub — AndroidManifest.xml
+    ═══════════════════════════════════════════════════════════════════════════
+    Permission Model:
+      • INTERNET             — Home Assistant WebSocket API + Qualcomm AI Hub
+      • FOREGROUND_SERVICE   — OmniNodeForegroundService (IoT orchestration daemon)
+      • RECORD_AUDIO         — Always-on acoustic trigger detection (Sensing Hub)
+      • CAMERA               — FastVLM visual inference feed
+      • ACCESS_FINE_LOCATION — Required for Wi-Fi Direct and BLE Mesh scanning
+      • BLUETOOTH_*          — BLE Mesh fallback connectivity
+      • WIFI_*               — Wi-Fi Direct peer-to-peer mesh routing
+      • CHANGE_NETWORK_STATE — Dynamic radio management (Office Kit bridge)
+    ═══════════════════════════════════════════════════════════════════════════
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  NETWORK & CONNECTIVITY                                            -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- Required for OkHttp WebSocket to Home Assistant + Qualcomm AI Hub -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!-- Wi-Fi — Local Area Network + Wi-Fi Direct P2P mesh routing -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_P2P_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_P2P_STATE" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  BLUETOOTH (BLE Mesh fallback — Snapdragon FastConnect 7900)      -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- Android 12+ runtime Bluetooth permissions -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <!-- Legacy Bluetooth (API < 31) — kept for backward compatibility -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  LOCATION (required by Wi-Fi Direct & BLE scan on Android 12+)   -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  FOREGROUND SERVICE — OmniNode IoT Orchestration Daemon           -->
+    <!--  Maintains persistent WebSocket + Matter state polling            -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- FOREGROUND_SERVICE_DATA_SYNC — covers OmniBackgroundService ambient monitoring -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WAKE_LOCK — required by OmniBackgroundService PowerManager.PARTIAL_WAKE_LOCK -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- SYSTEM_ALERT_WINDOW — required for Assistant Overlay over other apps -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  SENSORS — Audio & Visual Intelligence                            -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RECORD_AUDIO — Always-on acoustic trigger detection via Sensing Hub -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- CAMERA — FastVLM visual inference via iQOO triple camera array    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--  HARDWARE FEATURES                                                -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.wifi.direct"
+        android:required="false" />
+
+    <application
+        android:name=".OmniNodeApp"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OmniNode"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        tools:targetApi="31">
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  MAIN ACTIVITY                                                -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.OmniNode.SplashScreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".AssistantOverlayActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  FOREGROUND SERVICE — IoT Orchestration Daemon                -->
+        <!--  Handles: WebSocket persistence, Matter polling, BLE Mesh     -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <service
+            android:name=".service.OmniNodeForegroundService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="connectedDevice|microphone|camera" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  BACKGROUND LISTENING SERVICE — Ambient audio presence layer  -->
+        <!--  Persistent "Omni is listening" notification                  -->
+        <!--  foregroundServiceType=microphone required on Android 14+     -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <service
+            android:name=".service.OmniBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="false" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--  MATTER COMMISSIONING SERVICE (Google Home APIs SDK)          -->
+        <!--  Required declaration for the Android Matter commissioning    -->
+        <!--  activity to resolve through the Play Services binding.       -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <activity
+            android:name="com.google.android.gms.home.matter.commissioning.CommissioningActivity"
+            android:exported="true"
+            tools:node="remove" />
+
+        <!-- Meta-data for Google Home APIs SDK commissioning integration -->
+        <meta-data
+            android:name="com.google.android.gms.home.HomeClientId"
+            android:value="@string/home_client_id" />
+
+    </application>
+
+</manifest>

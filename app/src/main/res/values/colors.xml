@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AMOLED true-black backgrounds -->
+    <color name="background">#FF080B14</color>
+    <color name="background_variant">#FF0D1120</color>
+    <color name="surface_glass">#FF131829</color>
+
+    <!-- Primary — Quantum Cyan -->
+    <color name="primary">#FF00E5FF</color>
+    <color name="primary_dim">#FF003D4D</color>
+
+    <!-- Secondary — Plasma Violet -->
+    <color name="secondary">#FF9C27FF</color>
+
+    <!-- Status -->
+    <color name="online_green">#FF00E676</color>
+    <color name="alert_red">#FFFF1744</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFF0F4FF</color>
+    <color name="text_secondary">#FF8899BB</color>
+</resources>

@@ -1,0 +1,55 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#FF080B14"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Outer glow ring (Quantum Cyan) -->
+    <path
+        android:strokeColor="#4000E5FF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M54,12 A42,42 0 1,1 53.99,12 Z" />
+
+    <!-- Central node hex shape (Plasma Violet gradient approximation) -->
+    <path
+        android:fillColor="#9C27FF"
+        android:pathData="M54,28 L68,36 L68,52 L54,60 L40,52 L40,36 Z" />
+
+    <!-- Inner highlight -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,36 L62,41 L62,51 L54,56 L46,51 L46,41 Z" />
+
+    <!-- Center dot -->
+    <path
+        android:fillColor="#080B14"
+        android:pathData="M54,44 A4,4 0 1,1 53.99,44 Z" />
+
+    <!-- Connectivity lines -->
+    <path
+        android:strokeColor="#5500E5FF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,60 L54,78" />
+    <path
+        android:strokeColor="#5500E5FF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M40,52 L24,62" />
+    <path
+        android:strokeColor="#5500E5FF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M68,52 L84,62" />
+
+    <!-- Node dots -->
+    <path android:fillColor="#00E5FF" android:pathData="M51,75 A3,3 0 1,1 50.99,75 Z" />
+    <path android:fillColor="#9C27FF" android:pathData="M21,59 A3,3 0 1,1 20.99,59 Z" />
+    <path android:fillColor="#9C27FF" android:pathData="M81,59 A3,3 0 1,1 80.99,59 Z" />
+</vector>

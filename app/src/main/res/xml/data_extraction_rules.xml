@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    data_extraction_rules.xml — Android 12+ data extraction rules for OmniNode.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="omninode_config.xml" />
+        <exclude domain="file" path="models/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="omninode_config.xml" />
+    </device-transfer>
+</data-extraction-rules>

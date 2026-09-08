@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OmniNode Hub</string>
+    <string name="home_client_id">omninode_hub_matter_client</string>
+
+    <!-- Notification channels -->
+    <string name="notif_channel_iot_daemon">IoT Orchestration</string>
+    <string name="notif_channel_alerts">Smart Living Alerts</string>
+    <string name="notif_channel_ai">On-Device AI</string>
+
+    <!-- Accessibility -->
+    <string name="cd_toggle_device">Toggle device power</string>
+    <string name="cd_npu_indicator">NPU utilization indicator</string>
+    <string name="cd_send_message">Send message to Gemma AI</string>
+    <string name="cd_capture_scene">Capture scene for FastVLM analysis</string>
+</resources>

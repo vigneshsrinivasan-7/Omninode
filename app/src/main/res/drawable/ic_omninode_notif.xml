@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- OmniNode hex node notification icon (monochrome white) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2 L18,5.5 L18,12.5 L12,16 L6,12.5 L6,5.5 Z" />
+    <path
+        android:fillColor="#FF080B14"
+        android:pathData="M12,6 L15,7.75 L15,11.25 L12,13 L9,11.25 L9,7.75 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11,13 L11,21 L13,21 L13,13 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M5.5,12 L2,18 L4,18 L6.5,14 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18.5,12 L22,18 L20,18 L17.5,14 Z" />
+</vector>

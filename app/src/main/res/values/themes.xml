@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme — dark AMOLED. OmniNode uses Compose theming;
+         this XML theme is only for the Window and splash screen. -->
+    <style name="Theme.OmniNode" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Splash screen theme — extends the base theme -->
+    <style name="Theme.OmniNode.SplashScreen" parent="Theme.OmniNode">
+        <item name="android:windowSplashScreenBackground">@color/background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_omninode_splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.OmniNode</item>
+    </style>
+</resources>

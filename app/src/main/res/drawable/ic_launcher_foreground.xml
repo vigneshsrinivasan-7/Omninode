@@ -1,0 +1,39 @@
+<!-- Adaptive icon foreground layer for OmniNode Hub launcher icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer glow ring (Quantum Cyan) -->
+    <path
+        android:strokeColor="#3300E5FF"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M54,16 A38,38 0 1,1 53.99,16 Z" />
+
+    <!-- Central hexagon (Plasma Violet) -->
+    <path
+        android:fillColor="#9C27FF"
+        android:pathData="M54,28 L66,35 L66,49 L54,56 L42,49 L42,35 Z" />
+
+    <!-- Inner highlight hex (Quantum Cyan) -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,35 L61,39 L61,47 L54,51 L47,47 L47,39 Z" />
+
+    <!-- Center void -->
+    <path
+        android:fillColor="#080B14"
+        android:pathData="M54,42 A4,4 0 1,1 53.99,42 Z" />
+
+    <!-- Connectivity spokes -->
+    <path android:strokeColor="#6600E5FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M54,56 L54,78" />
+    <path android:strokeColor="#6600E5FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M42,49 L24,60" />
+    <path android:strokeColor="#6600E5FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M66,49 L84,60" />
+
+    <!-- Terminal node dots -->
+    <path android:fillColor="#00E5FF" android:pathData="M51,75 A3.5,3.5 0 1,1 50.99,75 Z" />
+    <path android:fillColor="#9C27FF" android:pathData="M20.5,57.5 A3.5,3.5 0 1,1 20.49,57.5 Z" />
+    <path android:fillColor="#9C27FF" android:pathData="M83.5,57.5 A3.5,3.5 0 1,1 83.49,57.5 Z" />
+</vector>
