@@ -64,6 +64,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- WAKE_LOCK — required by OmniBackgroundService PowerManager.PARTIAL_WAKE_LOCK -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     
     <!-- SYSTEM_ALERT_WINDOW — required for Assistant Overlay over other apps -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -126,6 +127,8 @@
             android:name=".AssistantOverlayActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:exported="false"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
             android:launchMode="singleTop" />
 
         <!-- ═══════════════════════════════════════════════════════════════ -->

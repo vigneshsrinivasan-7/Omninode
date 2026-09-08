@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -29,11 +31,10 @@ import javax.inject.Inject
  * OmniBackgroundService — Ambient Intelligence Foreground Service.
  *
  * Responsibilities:
- *  • Maintains persistent foreground notification with 1-tap "Talk" voice trigger.
- *  • Manages Picovoice Porcupine wake-word detection when access key is configured.
- *  • Launches [AssistantOverlayActivity] on wake-word trigger or notification tap.
- *  • Runs completely silently in standby — no continuous microphone polling loops
- *    or audible system chimes.
+ *  • Always-on, 100% silent acoustic wake-word detection for "Hey Omni" / "Omni".
+ *  • Zero Google chime loops and zero mic on/off toggling (uses direct AudioRecord).
+ *  • Displays persistent status notification with full-screen popup capability.
+ *  • Launches [AssistantOverlayActivity] when "Hey Omni" is spoken.
  */
 @AndroidEntryPoint
 class OmniBackgroundService : Service() {
@@ -43,6 +44,7 @@ class OmniBackgroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var wakeLock: PowerManager.WakeLock? = null
     private var porcupineManager: PorcupineManager? = null
+    private var acousticEngine: AcousticWakeWordEngine? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -53,7 +55,14 @@ class OmniBackgroundService : Service() {
         ensureNotificationChannel()
         startForeground(NOTIFICATION_ID, buildListeningNotification())
         acquireWakeLock()
+
+        // 1. Try Porcupine if key is configured
         initPorcupine()
+
+        // 2. Fallback to native silent continuous AudioRecord engine (Zero Key, Always-On)
+        if (porcupineManager == null) {
+            initAcousticEngine()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -72,7 +81,7 @@ class OmniBackgroundService : Service() {
                 return START_STICKY
             }
             ACTION_UPDATE_STATUS -> {
-                val status = intent.getStringExtra(EXTRA_STATUS) ?: "OmniNode Hub — Ready"
+                val status = intent.getStringExtra(EXTRA_STATUS) ?: "Omni is listening for 'Hey Omni'"
                 updateNotificationText(status)
                 return START_STICKY
             }
@@ -88,13 +97,31 @@ class OmniBackgroundService : Service() {
             porcupineManager = null
         } catch (e: Exception) { /* ignore */ }
 
+        try {
+            acousticEngine?.stop()
+            acousticEngine = null
+        } catch (e: Exception) { /* ignore */ }
+
         serviceScope.cancel()
         releaseWakeLock()
         super.onDestroy()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Picovoice Wake Word (Silent AudioRecord, no Google chimes)
+    //  Acoustic Wake Word Engine (Silent AudioRecord, Zero-Key, No Google Chimes)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun initAcousticEngine() {
+        acousticEngine?.stop()
+        acousticEngine = AcousticWakeWordEngine(this) {
+            Timber.i("OmniBackgroundService: ★ 'Hey Omni' detected by acoustic engine!")
+            launchAssistantOverlay()
+        }
+        acousticEngine?.start()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Picovoice Porcupine (Used if configured)
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun initPorcupine() {
@@ -102,7 +129,7 @@ class OmniBackgroundService : Service() {
             .getString("picovoice_key", "") ?: ""
 
         if (accessKey.isBlank() || accessKey.contains("PLACEHOLDER")) {
-            Timber.i("OmniBackgroundService: Picovoice key not set — running in standby tap-to-talk mode")
+            Timber.i("OmniBackgroundService: Picovoice key not set — using on-device AcousticWakeWordEngine")
             porcupineManager = null
             return
         }
@@ -139,14 +166,51 @@ class OmniBackgroundService : Service() {
         }
     }
 
+    /**
+     * Wakes up Omni:
+     *  1. Plays distinct wake beep.
+     *  2. Speaks "Yes? I'm listening." aloud.
+     *  3. Fires high-priority Full-Screen Intent + startActivity so MIUI pops up the overlay over any app.
+     */
     private fun launchAssistantOverlay() {
         try {
-            val intent = Intent(this, AssistantOverlayActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            startActivity(intent)
+            // 1. Play pleasant wake tone
+            ToneGenerator(AudioManager.STREAM_MUSIC, 90)
+                .startTone(ToneGenerator.TONE_PROP_BEEP, 130)
+        } catch (e: Exception) { /* ignore */ }
+
+        // 2. Speak greeting so user immediately hears Omni respond out loud
+        ttsManager.speak("Yes? I'm listening.")
+
+        // 3. Build full-screen intent so MIUI pops up the overlay over any app/home screen
+        val overlayIntent = Intent(this, AssistantOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this,
+            2005,
+            overlayIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val headsUpNotif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_omninode_notif)
+            .setContentTitle("OmniNode Assistant")
+            .setContentText("Omni is listening...")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setAutoCancel(true)
+            .build()
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        nm?.notify(NOTIFICATION_ID + 1, headsUpNotif)
+
+        // 4. Also call direct startActivity
+        try {
+            startActivity(overlayIntent)
         } catch (e: Exception) {
-            Timber.e(e, "OmniBackgroundService: Failed to start AssistantOverlayActivity")
+            Timber.e(e, "OmniBackgroundService: startActivity failed — fullScreenIntent will handle popup")
         }
     }
 
@@ -158,10 +222,10 @@ class OmniBackgroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "OmniNode Hub Service",
-                NotificationManager.IMPORTANCE_LOW,
+                "OmniNode Ambient Presence",
+                NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "OmniNode persistent background service and voice assistant"
+                description = "OmniNode hands-free acoustic trigger and voice assistant"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
@@ -172,7 +236,7 @@ class OmniBackgroundService : Service() {
     }
 
     private fun buildListeningNotification(
-        contentText: String = "OmniNode Hub — Ready (Tap 'Talk' to speak)",
+        contentText: String = "Omni is listening for 'Hey Omni'",
     ): Notification {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -210,7 +274,7 @@ class OmniBackgroundService : Service() {
             .setSmallIcon(R.drawable.ic_omninode_notif)
             .setContentTitle("OmniNode")
             .setContentText(contentText)
-            .setSubText("Always-On Smart Living")
+            .setSubText("Always-On Acoustic Presence")
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
